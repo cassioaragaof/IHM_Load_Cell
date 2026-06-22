@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import (QMainWindow, QLabel, QVBoxLayout, QHBoxLayout,
                              QTabWidget, QRadioButton, QDoubleSpinBox, QFormLayout)
 from PyQt5.QtCore import Qt, QRectF
 from PyQt5.QtGui import QFont, QPainter, QPen, QColor
+import pyqtgraph as pg
 
 class GaugeRelogio(QWidget):
     def __init__(self, parent=None):
@@ -63,20 +64,35 @@ class VisualMainWindow(QMainWindow):
 
     def _aplicar_estilos(self):
         self.setStyleSheet("""
-            QMainWindow { background-color: #121212; }
-            QLabel { color: #ffffff; font-family: 'Segoe UI', Arial; font-size: 16px; }
-            QGroupBox { border: 1px solid #333333; border-radius: 6px; margin-top: 15px; color: #b3b3b3; font-weight: bold; font-size: 16px; }
-            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }
+            /* FORÇA O FUNDO CINZA ESCURO NA JANELA E EM TODAS AS ABAS */
+            QMainWindow, QTabWidget > QWidget { background-color: #262626; }
+            
+            /* Garante que os textos não tenham quadrados brancos por trás */
+            QLabel { background-color: transparent; color: #ffffff; font-family: 'Segoe UI', Arial; font-size: 16px; }
+            QRadioButton { background-color: transparent; color: white; font-size: 18px; spacing: 10px; }
+            
+            QGroupBox { border: 1px solid #444444; border-radius: 6px; margin-top: 15px; color: #b3b3b3; font-weight: bold; font-size: 16px; }
+            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; background-color: transparent; }
+            
             QPushButton { background-color: #2196F3; color: white; border-radius: 4px; padding: 12px; font-size: 18px; font-weight: bold; }
             QPushButton:hover { background-color: #1E88E5; }
             QPushButton:disabled { background-color: #444444; color: #888888; }
-            QProgressBar { border: 1px solid #333; border-radius: 4px; text-align: center; color: white; font-weight: bold; font-size: 16px; background-color: #1e1e1e; }
+            
+            QProgressBar { border: 1px solid #444; border-radius: 4px; text-align: center; color: white; font-weight: bold; font-size: 16px; background-color: #1e1e1e; }
             QProgressBar::chunk { background-color: #00E676; }
-            QTabWidget::pane { border: 1px solid #333; border-radius: 4px; }
-            QTabBar::tab { background: #252525; color: #ffffff; padding: 0px 10px; border: 1px solid #333; font-weight: bold; font-size: 18px; min-width: 280px; min-height: 45px; }
+            
+            /* ABAS CORRIGIDAS E COM FUNDO CINZA */
+            QTabWidget::pane { border: 1px solid #444; border-radius: 4px; background-color: #262626; }
+            QTabBar::tab { background: #1e1e1e; color: #aaaaaa; padding: 0px 10px; border: 1px solid #444; font-weight: bold; font-size: 18px; min-width: 280px; min-height: 45px; }
             QTabBar::tab:selected { background: #2196F3; color: white; border-bottom-color: #2196F3; }
-            QRadioButton { color: white; font-size: 18px; spacing: 10px; }
-            QDoubleSpinBox { background-color: #222; color: white; border: 1px solid #555; padding: 8px; font-size: 18px; }
+            
+            QDoubleSpinBox { background-color: #1e1e1e; color: white; border: 1px solid #555; padding: 8px; font-size: 18px; }
+            
+            /* Pop-ups (QMessageBox) Elegantes */
+            QMessageBox { background-color: #2b2b2b; }
+            QMessageBox QLabel { color: #ffffff; font-size: 14px; font-weight: normal; background-color: transparent; }
+            QMessageBox QPushButton { background-color: #4CAF50; color: white; border-radius: 4px; padding: 6px 20px; font-size: 14px; min-width: 80px; margin: 5px; }
+            QMessageBox QPushButton:hover { background-color: #45a049; }
         """)
 
     def _init_ui(self):
@@ -101,12 +117,27 @@ class VisualMainWindow(QMainWindow):
         self.barra_carga.setFixedHeight(30)
         layout_principal.addWidget(self.barra_carga)
 
-        grupo_ensaio = QGroupBox("Controlo de Ensaio (Estabilização)")
+        # --- GRÁFICO ADICIONADO AQUI ---
+        self.grafico_peso = pg.PlotWidget()
+        self.grafico_peso.setBackground('#262626') 
+        self.grafico_peso.setTitle("Leitura Contínua (Tempo Real)", color="#ffffff", size="12pt")
+        self.grafico_peso.setLabel('left', 'Peso (kg)', color='#aaaaaa')
+        self.grafico_peso.showGrid(x=True, y=True, alpha=0.3)
+        self.grafico_peso.setYRange(-1, 25) 
+        self.grafico_peso.setFixedHeight(180) 
+        
+        self.linha_grafico = self.grafico_peso.plot(pen=pg.mkPen(color='#00E676', width=2))
+        layout_principal.addWidget(self.grafico_peso)
+        # -------------------------------
+
+        grupo_ensaio = QGroupBox("Controles")
         layout_ensaio = QVBoxLayout()
         layout_botoes = QHBoxLayout()
+        
         self.btn_iniciar_ensaio = QPushButton("INICIAR MEDIÇÃO")
         self.btn_tara = QPushButton("TARA")
         self.btn_tara.setStyleSheet("background-color: #555555;")
+        
         layout_botoes.addWidget(self.btn_tara)
         layout_botoes.addWidget(self.btn_iniciar_ensaio)
         layout_ensaio.addLayout(layout_botoes)
@@ -157,8 +188,8 @@ class VisualMainWindow(QMainWindow):
         grupo_modo = QGroupBox("1. Seleção do Modo de Aquisição")
         layout_modo = QVBoxLayout()
         layout_modo.setSpacing(10)
-        self.radio_caso2 = QRadioButton("Caso 2: Receber Direto em Kg (Cálculo feito no Arduino)")
-        self.radio_caso1 = QRadioButton("Caso 1: Receber Tensão em mV (Cálculo feito pelo PC)")
+        self.radio_caso2 = QRadioButton("Receber Direto em Kg (Cálculo feito no Arduino)")
+        self.radio_caso1 = QRadioButton("Receber Tensão em mV (Cálculo feito pelo PC)")
         self.radio_caso2.setChecked(True)
         layout_modo.addWidget(self.radio_caso2)
         layout_modo.addWidget(self.radio_caso1)
@@ -218,3 +249,9 @@ class VisualMainWindow(QMainWindow):
                 QProgressBar { border: 1px solid #333; border-radius: 4px; text-align: center; color: white; font-weight: bold; font-size: 16px; background-color: #1e1e1e; }
                 QProgressBar::chunk { background-color: #00E676; }
             """)
+
+    def atualizar_relatorio_estatistico(self, qtd, media, variancia, dispersao):
+        self.lbl_stat_amostras.setText(f"Nº de Amostras Coletadas: {qtd} pontos")
+        self.lbl_stat_media.setText(f"Média Calculada (μ): {media:.4f} kg")
+        self.lbl_stat_variancia.setText(f"Variância Amostral (σ²): {variancia:.6f} kg²")
+        self.lbl_stat_dispersao.setText(f"Dispersão / Amplitude (Máx - Mín): {dispersao:.4f} kg")

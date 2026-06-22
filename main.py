@@ -1,6 +1,3 @@
-# ======================================================================
-# Projeto: IHM para Célula de Carga
-# ======================================================================
 import sys
 import numpy as np
 import pandas as pd
@@ -8,6 +5,7 @@ from PyQt5.QtWidgets import QApplication, QMessageBox, QFileDialog
 from PyQt5.QtCore import QTimer
 from ui_interface import VisualMainWindow
 from serial_worker import SerialWorker
+import pyqtgraph as pg
 
 TEMPO_ENSAIO_SEGUNDOS = 5.0  
 
@@ -27,24 +25,30 @@ class IhmController:
         self.amostras_ensaio = []
         self.dados_exportacao = None
 
+        self.tamanho_grafico = 100
+        self.historico_peso = [0.0] * self.tamanho_grafico
+
         self.cronometro_timer = QTimer()
         self.cronometro_timer.setInterval(50) 
         self.cronometro_timer.timeout.connect(self.atualizar_cronometro)
 
-        # Configuração do Relógio
         self.view.gauge_timer.atualizar_tempo(TEMPO_ENSAIO_SEGUNDOS, TEMPO_ENSAIO_SEGUNDOS, False, False)
 
         self.hardware = SerialWorker(port='AUTO', baudrate=9600)
         self.hardware.leitura_bruta.connect(self.receber_fluxo_dados)
-        self.hardware.erro_conexao.connect(self.exibir_erro)
+        
+        # Sinais de Hardware atualizados
+        self.hardware.erro_conexao.connect(self.exibir_status_pesquisa)
         self.hardware.porta_conectada.connect(self.ao_conectar_porta)
+        self.hardware.desconectado.connect(self.ao_desconectar)
         
         self.view.btn_tara.clicked.connect(self.aplicar_tara)
         self.view.btn_iniciar_ensaio.clicked.connect(self.iniciar_ensaio_estabilizacao)
         self.view.btn_salvar_csv.clicked.connect(self.salvar_relatorio_csv)
         self.view.btn_aplicar_config.clicked.connect(self.salvar_configuracoes)
         self.view.closeEvent = self.ao_fechar
-
+        self.view.grafico_peso.setYRange(-1, self.capacidade_celula * 1.1)
+        
         self.hardware.start()
         self.view.show()
 
@@ -59,7 +63,21 @@ class IhmController:
         self.tensao_excitacao = self.view.spin_excitacao.value()
         
         self.tara = 0.0
-        QMessageBox.information(self.view, "Sucesso", "Configurações da Célula aplicadas com sucesso!\nA Tara foi reiniciada.")
+        
+        limite_superior = self.capacidade_celula * 1.1
+        self.view.grafico_peso.setYRange(-1, limite_superior)
+        
+        self.historico_peso = [0.0] * self.tamanho_grafico
+        self.view.linha_grafico.setData(self.historico_peso)
+        
+        self.receber_fluxo_dados(self.ultimo_valor_bruto)
+        
+        self.exibir_popup(
+            "Configurações", 
+            "Parâmetros aplicados com sucesso!", 
+            f"A capacidade foi ajustada para {self.capacidade_celula} kg.\nO gráfico e os alarmes de sobrecarga foram reconfigurados dinamicamente e a Tara foi zerada.", 
+            "info"
+        )
         self.view.tabs.setCurrentIndex(0)
 
     def calcular_peso_real(self, valor_bruto):
@@ -78,23 +96,25 @@ class IhmController:
         if self.em_ensaio:
             self.amostras_ensaio.append(peso_real)
 
-        # 1. Calcula a porcentagem real da carga aplicada
         porcentagem = (peso_real / self.capacidade_celula) * 100
-        
-        # 2. Avalia se está em sobrecarga (acima de 100%)
         esta_em_sobrecarga = porcentagem > 100.0
-        
-        # 3. Limita a barra visualmente a 100% para não quebrar a UI
         porcentagem_visual = max(0, min(100, porcentagem)) 
         
-        # 4. Formata o texto final
         if esta_em_sobrecarga:
-            texto_peso = f"⚠️ {peso_real:.2f} kg"
+            texto_peso = f"⚠️ {peso_real:.2f} kg" 
         else:
             texto_peso = f"{peso_real:.2f} kg"
         
-        # 5. Envia os dados para a interface, passando a flag de sobrecarga
         self.view.atualizar_valores_fatais(texto_peso, porcentagem_visual, esta_em_sobrecarga)
+
+        self.historico_peso.pop(0) 
+        self.historico_peso.append(peso_real) 
+        self.view.linha_grafico.setData(self.historico_peso) 
+
+        if esta_em_sobrecarga:
+            self.view.linha_grafico.setPen(pg.mkPen(color='#FF5252', width=3))
+        else:
+            self.view.linha_grafico.setPen(pg.mkPen(color='#00E676', width=2))
 
     def aplicar_tara(self):
         self.tara = self.calcular_peso_real(self.ultimo_valor_bruto)
@@ -112,16 +132,11 @@ class IhmController:
         self.view.label_cronometro.setStyleSheet("color: #FF9800;")
         self.view.label_cronometro.setText("MANTENHA A CARGA ESTÁVEL! Capturando dados...")
         
-        # Inicia a Animação do Gauge (Ativo)
         self.view.gauge_timer.atualizar_tempo(self.tempo_restante, TEMPO_ENSAIO_SEGUNDOS, ativo=True)
-        
         self.cronometro_timer.start()
 
     def atualizar_cronometro(self):
-        # Decrementa alinhado aos 50ms do QTimer
         self.tempo_restante -= 0.05 
-        
-        # Atualiza o visual do relógio
         self.view.gauge_timer.atualizar_tempo(self.tempo_restante, TEMPO_ENSAIO_SEGUNDOS, ativo=True)
 
         if self.tempo_restante <= 0:
@@ -139,7 +154,6 @@ class IhmController:
         self.view.label_cronometro.setStyleSheet("color: #00E676; font-weight: bold;")
         self.view.label_cronometro.setText("✓ Medição Concluída com Sucesso!")
 
-        # Animação do Gauge (Concluído: Verde)
         self.view.gauge_timer.atualizar_tempo(self.tempo_restante, TEMPO_ENSAIO_SEGUNDOS, ativo=False, concluido=True)
 
         if len(self.amostras_ensaio) > 1:
@@ -177,24 +191,71 @@ class IhmController:
         if caminho_arquivo:
             try:
                 self.dados_exportacao.to_csv(caminho_arquivo, index=False, sep=';', decimal=',')
-                QMessageBox.information(self.view, "Sucesso", f"Relatório guardado com sucesso!")
+                self.exibir_popup(
+                    "Exportação", 
+                    "Relatório guardado com sucesso!", 
+                    f"O ficheiro foi salvo em:\n{caminho_arquivo}", 
+                    "info"
+                )
             except Exception as e:
-                QMessageBox.critical(self.view, "Erro", f"Não foi possível guardar o ficheiro:\n{str(e)}")
+                self.exibir_popup(
+                    "Erro", 
+                    "Falha ao guardar o relatório", 
+                    f"Verifique se o ficheiro não está aberto noutro programa.\nDetalhes técnicos: {str(e)}", 
+                    "erro"
+                )
 
     def ao_conectar_porta(self, porta):
         self.view.setWindowTitle(f"IHM Instrumentação Estatística [{porta}]")
         self.view.lbl_stat_status.setText(f"Status do Sistema: Conectado à porta {porta} (Modo Contínuo)")
         self.view.lbl_stat_status.setStyleSheet("color: #00E676;")
+        
+    def exibir_status_pesquisa(self, mensagem):
+        self.view.lbl_stat_status.setText(f"Status do Sistema: {mensagem}")
+        self.view.lbl_stat_status.setStyleSheet("color: #FF9800;") 
 
-    def exibir_erro(self, mensagem):
-        self.view.lbl_stat_status.setText("Status do Sistema: Erro na Conexão")
+    def ao_desconectar(self):
+        self.view.setWindowTitle("IHM Instrumentação Estatística [Desconectado]")
+        self.view.lbl_stat_status.setText("Status do Sistema: Arduino Desconectado / Mau Contato")
         self.view.lbl_stat_status.setStyleSheet("color: #FF5252;")
-        QMessageBox.critical(self.view, "Falha de Hardware", mensagem)
+        
+        if self.em_ensaio:
+            self.cronometro_timer.stop()
+            self.em_ensaio = False
+            self.tempo_restante = 0.0
+            
+            self.view.btn_iniciar_ensaio.setEnabled(True)
+            self.view.btn_tara.setEnabled(True)
+            self.view.tabs.setTabEnabled(1, True)
+            
+            self.view.label_cronometro.setStyleSheet("color: #FF5252; font-weight: bold;")
+            self.view.label_cronometro.setText("⚠️ ENSAIO INTERROMPIDO: Conexão perdida!")
+            self.view.gauge_timer.atualizar_tempo(5.0, 5.0, ativo=False, concluido=False)
+            
+        QMessageBox.critical(self.view, "Alerta de Hardware", 
+                             "⚠️ Mau contato no USB ou Arduino desconectado subitamente!\n\n"
+                             "Por favor, verifique o cabo e reconecte. O sistema tentará voltar automaticamente...")
+
 
     def ao_fechar(self, event):
         self.cronometro_timer.stop()
         self.hardware.stop()
         event.accept()
+        
+    def exibir_popup(self, titulo_janela, titulo_interno, detalhes, tipo="info"):
+        msg = QMessageBox(self.view)
+        msg.setWindowTitle(titulo_janela)
+        msg.setText(f"<h3>{titulo_interno}</h3>")
+        msg.setInformativeText(detalhes)
+        
+        if tipo == "erro":
+            msg.setIcon(QMessageBox.Critical)
+        elif tipo == "aviso":
+            msg.setIcon(QMessageBox.Warning)
+        else:
+            msg.setIcon(QMessageBox.Information)
+            
+        msg.exec_()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

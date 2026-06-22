@@ -1,45 +1,49 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual Environments (Ambientes Virtuais)
-venv/
-.venv/
-env/
-.env/
-ENV/
-env.bak/
-venv.bak/
-
-# IDEs e Editores de Código
+# ====================================================================
+# CONFIGURAÇÕES DO EDITOR (VS CODE)
+# ====================================================================
+# Ignora as configurações locais do seu editor para não dar conflito em outros PCs
 .vscode/
-.idea/
-*.swp
-*.swo
 
-# Ficheiros de dados gerados pela aplicação (Opcional)
-# Evita enviar relatórios de teste para o repositório
+# ====================================================================
+# AMBIENTES VIRTUAIS (PYTHON VENV)
+# ====================================================================
+# Ignora a pasta onde estão instaladas as bibliotecas (PyQt5, Pandas, etc.)
+.venv/
+venv/
+env/
+ENV/
+
+# ====================================================================
+# ARQUIVOS COMPILADOS E CACHE DO PYTHON
+# ====================================================================
+# Ignora arquivos temporários que o Python gera automaticamente ao rodar o código
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# ====================================================================
+# ARTEFATOS DO PYINSTALLER (EXECUTÁVEL)
+# ====================================================================
+# Ignora as pastas temporárias e o executável final gerado para manter o Git leve
+build/
+dist/
+*.spec
+
+# ====================================================================
+# DADOS E RELATÓRIOS (SAÍDAS DO PROGRAMA)
+# ====================================================================
+# Ignora relatórios em CSV que venham a ser gerados durante os seus testes de bancada
 *.csv
+*.xlsx
+*.log
+
+# ====================================================================
+# ARQUIVOS DO SISTEMA OPERACIONAL
+# ====================================================================
+# Ignora arquivos ocultos inúteis que o Windows ou Mac criam nas pastas
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
