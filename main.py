@@ -19,6 +19,8 @@ class IhmController:
         self.tensao_excitacao = 5.0
         
         self.tara = 0.0
+        self.unidade_medida = "kg"       
+        self.fator_conversao = 1.0       
         self.ultimo_valor_bruto = 0.0
         self.em_ensaio = False
         self.tempo_restante = 0
@@ -58,14 +60,27 @@ class IhmController:
         else:
             self.modo_leitura = "CASO_2"
             
+        # NOVA LÓGICA DE UNIDADES
+        if self.view.radio_kg.isChecked():
+            self.unidade_medida = "kg"
+            self.fator_conversao = 1.0
+        elif self.view.radio_n.isChecked():
+            self.unidade_medida = "N"
+            self.fator_conversao = 9.80665
+        elif self.view.radio_kgf.isChecked():
+            self.unidade_medida = "kgf"
+            self.fator_conversao = 1.0
+            
         self.capacidade_celula = self.view.spin_capacidade.value()
         self.sensibilidade_mv_v = self.view.spin_sensibilidade.value()
         self.tensao_excitacao = self.view.spin_excitacao.value()
         
         self.tara = 0.0
         
-        limite_superior = self.capacidade_celula * 1.1
+        # O limite do gráfico agora respeita a conversão
+        limite_superior = (self.capacidade_celula * self.fator_conversao) * 1.1
         self.view.grafico_peso.setYRange(-1, limite_superior)
+        self.view.grafico_peso.setLabel('left', f'Medição ({self.unidade_medida})', color='#aaaaaa')
         
         self.historico_peso = [0.0] * self.tamanho_grafico
         self.view.linha_grafico.setData(self.historico_peso)
@@ -75,7 +90,7 @@ class IhmController:
         self.exibir_popup(
             "Configurações", 
             "Parâmetros aplicados com sucesso!", 
-            f"A capacidade foi ajustada para {self.capacidade_celula} kg.\nO gráfico e os alarmes de sobrecarga foram reconfigurados dinamicamente e a Tara foi zerada.", 
+            f"Capacidade: {self.capacidade_celula} kg.\nUnidade: {self.unidade_medida}.\nO gráfico e limites foram reconfigurados dinamicamente.", 
             "info"
         )
         self.view.tabs.setCurrentIndex(0)
@@ -92,23 +107,28 @@ class IhmController:
         self.ultimo_valor_bruto = valor_bruto
         peso_base = self.calcular_peso_real(valor_bruto)
         peso_real = peso_base - self.tara
+        
+        # APLICAR CONVERSÃO AQUI
+        valor_exibicao = peso_real * self.fator_conversao
 
         if self.em_ensaio:
-            self.amostras_ensaio.append(peso_real)
+            self.amostras_ensaio.append(valor_exibicao)
 
-        porcentagem = (peso_real / self.capacidade_celula) * 100
+        # O cálculo da porcentagem continua usando a capacidade baseada na unidade atual
+        capacidade_convertida = self.capacidade_celula * self.fator_conversao
+        porcentagem = (valor_exibicao / capacidade_convertida) * 100
         esta_em_sobrecarga = porcentagem > 100.0
         porcentagem_visual = max(0, min(100, porcentagem)) 
         
         if esta_em_sobrecarga:
-            texto_peso = f"⚠️ {peso_real:.2f} kg" 
+            texto_peso = f"⚠️ {valor_exibicao:.2f} {self.unidade_medida}" 
         else:
-            texto_peso = f"{peso_real:.2f} kg"
+            texto_peso = f"{valor_exibicao:.2f} {self.unidade_medida}"
         
         self.view.atualizar_valores_fatais(texto_peso, porcentagem_visual, esta_em_sobrecarga)
 
         self.historico_peso.pop(0) 
-        self.historico_peso.append(peso_real) 
+        self.historico_peso.append(valor_exibicao) 
         self.view.linha_grafico.setData(self.historico_peso) 
 
         if esta_em_sobrecarga:
@@ -159,18 +179,20 @@ class IhmController:
         if len(self.amostras_ensaio) > 1:
             serie_dados = pd.Series(self.amostras_ensaio)
             total_amostras = len(serie_dados)
-            media = serie_dados.mean()                     
+            media = serie_dados.mean()                    
             variancia = serie_dados.var(ddof=1)            
             dispersao = np.max(self.amostras_ensaio) - np.min(self.amostras_ensaio)
 
-            self.view.atualizar_relatorio_estatistico(total_amostras, media, variancia, dispersao)
+            # Envia a unidade atual para a interface
+            self.view.atualizar_relatorio_estatistico(total_amostras, media, variancia, dispersao, self.unidade_medida)
             
+            # Exportação com cabeçalhos dinâmicos
             self.dados_exportacao = pd.DataFrame({
                 "Amostra": range(1, total_amostras + 1),
-                "Peso_Lido_kg": self.amostras_ensaio,
-                "Media_do_Ensaio_kg": media,
+                f"Valor_Lido_{self.unidade_medida}": self.amostras_ensaio,
+                f"Media_do_Ensaio_{self.unidade_medida}": media,
                 "Variancia_do_Ensaio": variancia,
-                "Dispersao_Amplitude_kg": dispersao,
+                f"Dispersao_Amplitude_{self.unidade_medida}": dispersao,
                 "Modo_Aquisicao": self.modo_leitura
             })
             

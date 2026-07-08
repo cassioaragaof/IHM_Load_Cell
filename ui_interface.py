@@ -117,7 +117,6 @@ class VisualMainWindow(QMainWindow):
         self.barra_carga.setFixedHeight(30)
         layout_principal.addWidget(self.barra_carga)
 
-        # --- GRÁFICO ADICIONADO AQUI ---
         self.grafico_peso = pg.PlotWidget()
         self.grafico_peso.setBackground('#262626') 
         self.grafico_peso.setTitle("Leitura Contínua (Tempo Real)", color="#ffffff", size="12pt")
@@ -128,7 +127,6 @@ class VisualMainWindow(QMainWindow):
         
         self.linha_grafico = self.grafico_peso.plot(pen=pg.mkPen(color='#00E676', width=2))
         layout_principal.addWidget(self.grafico_peso)
-        # -------------------------------
 
         grupo_ensaio = QGroupBox("Controles")
         layout_ensaio = QVBoxLayout()
@@ -185,10 +183,11 @@ class VisualMainWindow(QMainWindow):
         layout_config.setSpacing(25)
         layout_config.setAlignment(Qt.AlignTop)
 
+        # 1. Seleção do Modo de Aquisição
         grupo_modo = QGroupBox("1. Seleção do Modo de Aquisição")
         layout_modo = QVBoxLayout()
         layout_modo.setSpacing(10)
-        self.radio_caso2 = QRadioButton("Receber Direto em Kg (Cálculo feito no Arduino)")
+        self.radio_caso2 = QRadioButton("Receber Direto em Kg/F (Cálculo feito no Arduino)")
         self.radio_caso1 = QRadioButton("Receber Tensão em mV (Cálculo feito pelo PC)")
         self.radio_caso2.setChecked(True)
         layout_modo.addWidget(self.radio_caso2)
@@ -196,7 +195,8 @@ class VisualMainWindow(QMainWindow):
         grupo_modo.setLayout(layout_modo)
         layout_config.addWidget(grupo_modo)
 
-        self.grupo_params = QGroupBox("2. Parâmetros da Célula (Apenas para o Caso 1)")
+        # 2. Parâmetros da Célula
+        self.grupo_params = QGroupBox("2. Parâmetros da Célula")
         layout_form = QFormLayout()
         layout_form.setSpacing(12)
         
@@ -224,6 +224,25 @@ class VisualMainWindow(QMainWindow):
         self.grupo_params.setEnabled(False)
         layout_config.addWidget(self.grupo_params)
 
+        # 3. Unidade de Medida (Exibição)
+        self.grupo_unidades = QGroupBox("3. Unidade de Medida (Exibição)")
+        layout_unidades = QVBoxLayout()
+        layout_unidades.setSpacing(10)
+        
+        self.radio_kg = QRadioButton("Balança / Massa (kg)")
+        self.radio_n = QRadioButton("Força de Tração (Newtons - N)")
+        self.radio_kgf = QRadioButton("Força (Quilograma-força - kgf)")
+        
+        self.radio_kg.setChecked(True)
+        
+        layout_unidades.addWidget(self.radio_kg)
+        layout_unidades.addWidget(self.radio_n)
+        layout_unidades.addWidget(self.radio_kgf)
+        
+        self.grupo_unidades.setLayout(layout_unidades)
+        layout_config.addWidget(self.grupo_unidades)
+
+        # 4. Botão de Aplicar
         self.btn_aplicar_config = QPushButton("APLICAR CONFIGURAÇÕES")
         layout_config.addWidget(self.btn_aplicar_config)
 
@@ -250,8 +269,8 @@ class VisualMainWindow(QMainWindow):
                 QProgressBar::chunk { background-color: #00E676; }
             """)
 
-    def atualizar_relatorio_estatistico(self, qtd, media, variancia, dispersao):
+    def atualizar_relatorio_estatistico(self, qtd, media, variancia, dispersao, unidade):
         self.lbl_stat_amostras.setText(f"Nº de Amostras Coletadas: {qtd} pontos")
-        self.lbl_stat_media.setText(f"Média Calculada (μ): {media:.4f} kg")
-        self.lbl_stat_variancia.setText(f"Variância Amostral (σ²): {variancia:.6f} kg²")
-        self.lbl_stat_dispersao.setText(f"Dispersão / Amplitude (Máx - Mín): {dispersao:.4f} kg")
+        self.lbl_stat_media.setText(f"Média Calculada (μ): {media:.4f} {unidade}")
+        self.lbl_stat_variancia.setText(f"Variância Amostral (σ²): {variancia:.6f} {unidade}²")
+        self.lbl_stat_dispersao.setText(f"Dispersão / Amplitude (Máx - Mín): {dispersao:.4f} {unidade}")
